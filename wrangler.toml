@@ -1,0 +1,13 @@
+name = "instagram-reel-publisher-api"
+main = "worker/index.js"
+compatibility_date = "2026-10-01"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "replace-with-your-r2-bucket-name"
+
+# Configure these in the Cloudflare dashboard as Worker variables/secrets:
+# DASHBOARD_PASSWORD (secret)
+# META_ACCOUNTS_JSON (secret)
+# R2_PUBLIC_BASE_URL (variable, HTTPS URL with no trailing slash)
+# ALLOWED_ORIGIN (variable, exact deployed Pages origin)
