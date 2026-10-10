@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101114">
+<title>Reel Publisher</title>
+<style>
+:root{color-scheme:dark;--bg:#101114;--panel:#191b21;--line:#30333d;--text:#f4f5f7;--muted:#a6a9b4;--accent:#d9ff67;--danger:#ff9c9c}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#24272f 0,#101114 52%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:900px;margin:auto;padding:24px 16px 64px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 24px}.brand{font-size:23px;font-weight:800;letter-spacing:-.7px}.tag{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:5px 10px}
+h1{font-size:clamp(28px,5vw,42px);line-height:1.08;letter-spacing:-1.3px;margin:10px 0}.sub{color:var(--muted);max-width:600px;margin:0 0 24px}
+.panel{background:rgba(25,27,33,.95);border:1px solid var(--line);border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 10px 35px #0002}
+h2{font-size:17px;margin:0 0 14px}.field{display:block;margin:14px 0}.field span,.small{display:block;color:var(--muted);font-size:13px;margin-bottom:7px}
+input[type=password],input[type=text],textarea{width:100%;border:1px solid var(--line);background:#101115;color:var(--text);border-radius:10px;padding:12px;font:inherit;outline:none}
+textarea{min-height:120px;resize:vertical}input:focus,textarea:focus{border-color:var(--accent)}
+input[type=file]{width:100%;background:#101115;border:1px dashed #50535f;border-radius:10px;padding:12px;color:var(--muted)}
+.accounts{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.account{display:flex;align-items:center;gap:10px;border:1px solid var(--line);padding:13px;border-radius:12px;background:#14161b}.account input{accent-color:var(--accent);width:18px;height:18px}.account strong{display:block;font-size:14px}.account small{color:var(--muted)}
+button{cursor:pointer;border:0;border-radius:11px;background:var(--accent);color:#15170c;font-weight:800;font-size:15px;padding:13px 18px}button:disabled{opacity:.45;cursor:wait}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.secondary{background:transparent;border:1px solid var(--line);color:var(--text)}.status{white-space:pre-wrap;color:var(--muted);font-size:14px;margin-top:14px}.status.error{color:var(--danger)}.status.ok{color:var(--accent)}.hidden{display:none!important}.notice{border-left:3px solid var(--accent);padding:10px 12px;background:#d9ff670c;color:#d6d8de;font-size:13px;border-radius:0 8px 8px 0}
+footer{color:var(--muted);font-size:12px;text-align:center;margin-top:25px}a{color:var(--accent)}@media(max-width:540px){.panel{padding:16px}.top{align-items:flex-start}}
+</style>
+</head>
+<body><main>
+<div class="top"><div class="brand">◉ Reel Publisher</div><span class="tag">PRIVATE DASHBOARD</span></div>
+<h1>Publish once.<br>Share across accounts.</h1>
+<p class="sub">Upload a Reel, add your caption, choose your Instagram accounts, and publish from one place.</p>
+<section class="panel" id="loginPanel">
+<h2>Dashboard access</h2><label class="field"><span>Dashboard password</span><input id="password" type="password" autocomplete="current-password" placeholder="Enter your dashboard password"></label>
+<div class="row"><button id="loginBtn">Unlock dashboard</button></div><div class="status" id="loginStatus"></div>
+</section>
+<div id="app" class="hidden">
+<section class="panel"><h2>1. Choose accounts</h2><div class="accounts" id="accounts"><p class="small">Connect to load your configured accounts.</p></div><p class="small">Accounts must be configured on the server by the owner.</p></section>
+<section class="panel"><h2>2. Add your Reel</h2>
+<label class="field"><span>Video file (MP4 recommended)</span><input id="video" type="file" accept="video/mp4,video/quicktime,video/*" required></label>
+<label class="field"><span>Cover image (optional)</span><input id="cover" type="file" accept="image/*"></label>
+<label class="field"><span>Caption</span><textarea id="caption" maxlength="2200" placeholder="Write your caption…"></textarea><span id="count" class="small">0 / 2200</span></label>
+<div class="notice">Your video is uploaded temporarily for Meta to fetch. Use only content you have the rights to publish. Large videos may take time to upload and process.</div>
+<div class="row" style="margin-top:18px"><button id="publishBtn">Publish selected Reels</button><button id="logoutBtn" class="secondary">Lock dashboard</button></div>
+<div class="status" id="publishStatus" role="status" aria-live="polite"></div>
+</section>
+</div>
+<footer>Instagram publishing uses Meta's official API. Publishing is subject to Meta account eligibility and API limits.</footer>
+</main>
+<script>
+/* Set this to the deployed Cloudflare Worker URL, e.g. https://instagram-reel-publisher-api.yourname.workers.dev */
+const API_BASE = "https://REPLACE-WITH-YOUR-WORKER-URL";
+let password = "";
+const $ = id => document.getElementById(id);
+async function api(path, options={}) {
+  if(API_BASE.includes("REPLACE-WITH")) throw new Error("Setup needed: set API_BASE in public/index.html to your deployed Worker URL.");
+  const headers = new Headers(options.headers || {});
+  headers.set("Authorization", "Bearer " + password);
+  const res = await fetch(API_BASE + path, {...options, headers});
+  const data = await res.json().catch(()=>({error:"Unexpected server response"}));
+  if(!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+function status(id,msg,kind=""){ $(id).textContent=msg; $(id).className="status "+kind; }
+async function loadAccounts(){
+  const data=await api("/api/accounts");
+  $("accounts").innerHTML="";
+  if(!data.accounts.length){$("accounts").textContent="No Instagram accounts are configured yet.";return}
+  data.accounts.forEach(a=>{
+    const label=document.createElement("label");label.className="account";
+    const cb=document.createElement("input");cb.type="checkbox";cb.value=a.id;
+    const div=document.createElement("div");const strong=document.createElement("strong");strong.textContent=a.label;
+    const small=document.createElement("small");small.textContent="Instagram professional account";
+    div.append(strong,small);label.append(cb,div);$("accounts").append(label);
+  });
+}
+$("loginBtn").onclick=async()=>{
+  password=$("password").value;
+  if(!password){status("loginStatus","Enter your dashboard password.","error");return}
+  $("loginBtn").disabled=true;
+  try{await loadAccounts();$("loginPanel").classList.add("hidden");$("app").classList.remove("hidden");status("loginStatus","")}
+  catch(e){password="";status("loginStatus",e.message,"error")}
+  finally{$("loginBtn").disabled=false}
+};
+$("logoutBtn").onclick=()=>{password="";$("password").value="";$("app").classList.add("hidden");$("loginPanel").classList.remove("hidden");status("publishStatus","")};
+$("caption").addEventListener("input",()=>$("count").textContent=`${$("caption").value.length} / 2200`);
+$("publishBtn").onclick=async()=>{
+ const ids=[...document.querySelectorAll('#accounts input:checked')].map(x=>x.value);
+ const video=$("video").files[0],cover=$("cover").files[0];
+ if(!ids.length){status("publishStatus","Choose at least one account.","error");return}
+ if(!video){status("publishStatus","Choose a video file first.","error");return}
+ if(video.size>1024*1024*1024){status("publishStatus","This starter limits uploads to 1 GB. Check your Worker plan and account limits.","error");return}
+ const btn=$("publishBtn");btn.disabled=true;
+ try{
+   status("publishStatus","Uploading video securely…");
+   const fd=new FormData();fd.append("video",video);if(cover)fd.append("cover",cover);
+   fd.append("caption",$("caption").value);fd.append("accountIds",JSON.stringify(ids));
+   const result=await api("/api/publish",{method:"POST",body:fd});
+   const lines=(result.results||[]).map(r=>`${r.label}: ${r.success?"Published":"Failed"}${r.message?" — "+r.message:""}`);
+   status("publishStatus",lines.join("\n")||"Request completed.",(result.results||[]).every(r=>r.success)?"ok":"error");
+ }catch(e){status("publishStatus",e.message,"error")}
+ finally{btn.disabled=false}
+};
+</script></body></html>
